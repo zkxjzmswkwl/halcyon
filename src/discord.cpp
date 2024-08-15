@@ -16,6 +16,7 @@ std::string post_login(std::string username, std::string password)
   cpr::Response r = cpr::Post(
     cpr::Url{"https://discord.com/api/v9/auth/login"},
     cpr::Header{{"content-type", "application/json"}},
+    cpr::Header{{"User-Agent", USER_AGENT_VAL}},
     cpr::Timeout{10000},
     cpr::Body{body}
   );
@@ -55,7 +56,7 @@ bool get_servers(DiscordContext* ctx)
   cpr::Response r = cpr::Get(
     cpr::Url{"https://discord.com/api/v9/users/@me/guilds"},
     cpr::Header{{"Authorization", ctx->token}},
-    cpr::Header{{"User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) discord/0.0.63 Chrome/124.0.6367.243 Electron/30.2.0 Safari/537.36"}},
+    cpr::Header{{"User-Agent", USER_AGENT_VAL}},
     cpr::Timeout{10000}
   );
 
@@ -65,7 +66,7 @@ bool get_servers(DiscordContext* ctx)
   assert(r.status_code == 200);
   assert(doc.IsArray());
 
-  for (int i = 0; i < doc.Size(); ++i)
+  for (unsigned int i = 0; i < doc.Size(); ++i)
   {
     const rapidjson::Value& item = doc[i];
     Server* newServer = new Server(item["name"].GetString(), item["id"].GetString());
@@ -83,11 +84,9 @@ bool get_channels_for_server(DiscordContext* ctx, Server* server)
   cpr::Response r = cpr::Get(
     cpr::Url{"https://discord.com/api/v9/guilds/" + server->id + "/channels"},
     cpr::Header{{"Authorization", ctx->token}},
-    cpr::Header{{"User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) discord/0.0.63 Chrome/124.0.6367.243 Electron/30.2.0 Safari/537.36"}},
+    cpr::Header{{"User-Agent", USER_AGENT_VAL}},
     cpr::Timeout{10000}
   );
-
-  printf("Getting channels for server %s\n", server->name.c_str());
 
   rapidjson::Document doc;
   doc.Parse(r.text.c_str());
@@ -95,7 +94,7 @@ bool get_channels_for_server(DiscordContext* ctx, Server* server)
   if (!doc.IsArray())
     return false;
 
-  for (int i = 0; i < doc.Size(); ++i)
+  for (unsigned int i = 0; i < doc.Size(); ++i)
   {
     const rapidjson::Value& item = doc[i];
 
@@ -104,6 +103,43 @@ bool get_channels_for_server(DiscordContext* ctx, Server* server)
       item["name"].GetString(),
       item["id"].GetString()
     );
+    server->channel_count++;
+  }
+
+  return true;
+}
+//---------------------------------------------------------------------------
+bool get_focused_channel_content(DiscordContext* ctx)
+{
+  ctx->focused_channel->messages.fill(nullptr);
+  ctx->focused_channel->message_count = 0;
+
+  cpr::Response r = cpr::Get(
+    cpr::Url{"https://discord.com/api/v9/channels/" + ctx->focused_channel->id + "/messages?limit=10"},
+    cpr::Header{{"Authorization", ctx->token}},
+    cpr::Header{{"User-Agent", USER_AGENT_VAL}},
+    cpr::Timeout{10000}
+  );
+
+  if (r.status_code != 200)
+    return false;
+
+  rapidjson::Document doc;
+  doc.Parse(r.text.c_str());
+
+  if (!doc.IsArray())
+    return false;
+
+  for (unsigned int i = doc.Size(); i-- > 0;)
+  {
+    const rapidjson::Value& item = doc[i];
+
+    auto timestamp = item["timestamp"].GetString();
+    auto author = item["author"].GetObj()["username"].GetString();
+    auto body = item["content"].GetString();
+
+    ctx->focused_channel->messages[i] = new Message(timestamp, author, body);
+    ctx->focused_channel->message_count++;
   }
 
   return true;
@@ -121,5 +157,35 @@ bool post_message(DiscordContext* ctx, std::string message, std::string channelI
   );
 
   return true;
+}
+//---------------------------------------------------------------------------
+void display_servers(DiscordContext* ctx)
+{
+  for (unsigned int i = 0; i < ctx->server_count; i++)
+  {
+    if (i == 3 || i == 5)
+      continue;
+
+    auto server = ctx->servers.at(i);
+    if (server == nullptr)
+      break;
+
+    printf("[%d]\t%s\n", i, server->name.c_str());
+  }
+}
+//---------------------------------------------------------------------------
+void display_channels_for_server(Server* server, ChannelType channel_type)
+{
+  printf("Listing channels of %s\n", server->name.c_str());
+  for (unsigned int i = 0; i < server->channel_count; i++)
+  {
+    Channel* channel = server->channels.at(i);
+    // note: `channel->channel_type` seems silly. `type` is reserved, though.
+    // maybe `designation`?
+    if (channel->channel_type != channel_type)
+      continue;
+
+    printf("[%d]\t%s\n", i, channel->name.c_str());
+  }
 }
 //---------------------------------------------------------------------------

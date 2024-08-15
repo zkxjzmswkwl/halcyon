@@ -1,0 +1,35 @@
+TODO - rough path to functioning release build.
+
+
+Necessary
+---------------
+- Encrypt account.bin/token.bin
+- Remove (obviously) all hardcoded paths (C:\\Users\\owcar\\halcyon\\*)
+- Manage Discord online status via their websocket. Think it's on the v10 api(?).
+- - Simple ack heartbeat.
+- - Curses(?) tui?
+
+Would-be-nice
+- Remove dependencies (cpr/rapidjson).
+- - Rapidjson is actually quite nice.
+- - cpr is rubbish. Has somehow ended up nearly 5x slower than curl.
+- Doxygen?
+
+Unsure/want to benchmark
+- How much slower is std::string over char*?
+- - Is it really worth the convenience?
+- Smart pointers
+- - I'm already fairly certain use of any of these in a simple program isn't worth it.
+
+Things to never do in own code:
+- Polymorphism
+- - vtable lookups are still slow as fuck.
+
+Why I don't adhere to "Clean code guidelines"
+- Polymorphism is slow.
+- Functions not being able to peek into the structures they are operating on is idiotic.
+- - Without this you lose out on the ability to optimize what should be very very fast procedures.
+- "No mutating state"
+- - What? Just read the code and/or the comments to understand what's mutated where. This is retarded.
+- "Don't call directly into implementation"
+- - LOL!

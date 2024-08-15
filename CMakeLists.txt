@@ -15,4 +15,3 @@ add_executable(halcyon ${SOURCES} ${HEADERS})
 
 target_link_libraries(halcyon PRIVATE cpr::cpr)
 target_link_libraries(halcyon PRIVATE rapidjson)
-
