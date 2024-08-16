@@ -7,7 +7,7 @@
 #include "discord.h"
 #include "terminal.h"
 
-DiscordContext* g_ctx;
+discord::DiscordContext* g_ctx;
 
 void render()
 {
@@ -16,8 +16,13 @@ void render()
 
   term::clear();
   // Inefficient/bad
-  term::print_label("Server: ");
-  term::print_label(f_server->name);
+
+  // focused_server won't be populated if messaging a user directly.
+  if (f_server)
+  {
+    term::print_label("Server: ");
+    term::print_label(f_server->name);
+  }
   term::print_label(" Channel: ");
   term::print_label(f_channel->name);
   // - 
@@ -31,10 +36,10 @@ void render()
   }
 }
 
-void switch_channel_focus(Channel* channel)
+void switch_channel_focus(discord::Channel* channel)
 {
   g_ctx->focused_channel = channel;
-  get_focused_channel_content(g_ctx);
+  discord::get_focused_channel_content(g_ctx);
 }
 
 /// TODO: Move to input handler of some sort.
@@ -56,13 +61,34 @@ void take_input()
     get_focused_channel_content(g_ctx);
     render();
   }
+  else if (input == "/fr")
+  {
+    discord::display_friends(g_ctx);
+  }
+  else if (input.starts_with("/fr"))
+  {
+    auto delim_index = input.find(' ');
+    auto chosen_index = input.substr(delim_index + 1, input.length());
+    auto _friend = g_ctx->friends.at(atoi(chosen_index.c_str()));
+
+    auto private_chat_id = discord::get_chat_id_from_user(g_ctx, _friend->id);
+    // This is a memory leak.
+    // Too bad!
+    // TODO: fix.
+    auto channel = new discord::Channel(
+      discord::ChannelType::TEXT,
+      "Private chat with " + _friend->username,
+      private_chat_id
+    );
+    switch_channel_focus(channel);
+  }
   else if (input.starts_with("/srv"))
   {
     auto delim_index = input.find(' ');
     // given "/srv 1", want just "1".
     auto server_choice = input.substr(delim_index + 1, input.length());
     g_ctx->focused_server = g_ctx->servers.at(atoi(server_choice.c_str()));
-    display_channels_for_server(g_ctx->focused_server, ChannelType::TEXT);
+    display_channels_for_server(g_ctx->focused_server, discord::ChannelType::TEXT);
   }
   else if (input.starts_with("/ch") && g_ctx->focused_server != nullptr)
   {
@@ -100,7 +126,7 @@ std::string login_get_token()
   std::string password = line.substr(delim_index + 1, line.length());
 
   // login
-  auto token = post_login(email, password);
+  auto token = discord::post_login(email, password);
   assert(token.length() > 0);
   return token;
 }
@@ -115,7 +141,7 @@ std::string read_token_bin()
 
 int main(int, char**)
 {
-  g_ctx = get_context(read_token_bin());
+  g_ctx = discord::get_context(read_token_bin());
   /*post_message(g_ctx, "Dongs", "1273467180326977663");*/
 
   take_input();
