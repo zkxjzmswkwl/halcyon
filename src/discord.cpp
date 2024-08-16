@@ -18,8 +18,11 @@ std::string post_login(std::string username, std::string password)
     })");
 
     cpr::Response r =
-        cpr::Post(cpr::Url{"https://discord.com/api/v9/auth/login"}, cpr::Header{{"content-type", "application/json"}},
-                  cpr::Header{{"User-Agent", USER_AGENT_VAL}}, cpr::Timeout{10000}, cpr::Body{body});
+        cpr::Post(cpr::Url{"https://discord.com/api/v9/auth/login"},
+                  cpr::Header{{"content-type", "application/json"}},
+                  cpr::Header{{"User-Agent", USER_AGENT_VAL}},
+                  cpr::Timeout{10000},
+                  cpr::Body{body});
 
     rapidjson::Document doc;
     doc.Parse(r.text.c_str());
@@ -58,8 +61,10 @@ DiscordContext* get_context(std::string token)
 bool get_servers(DiscordContext* ctx)
 {
     cpr::Response r =
-        cpr::Get(cpr::Url{"https://discord.com/api/v9/users/@me/guilds"}, cpr::Header{{"Authorization", ctx->token}},
-                 cpr::Header{{"User-Agent", USER_AGENT_VAL}}, cpr::Timeout{10000});
+        cpr::Get(cpr::Url{"https://discord.com/api/v9/users/@me/guilds"},
+                 cpr::Header{{"Authorization", ctx->token}},
+                 cpr::Header{{"User-Agent", USER_AGENT_VAL}},
+                 cpr::Timeout{10000});
 
     rapidjson::Document doc;
     doc.Parse(r.text.c_str());
@@ -83,7 +88,8 @@ bool get_servers(DiscordContext* ctx)
 bool get_channels_for_server(DiscordContext* ctx, Server* server)
 {
     cpr::Response r = cpr::Get(cpr::Url{"https://discord.com/api/v9/guilds/" + server->id + "/channels"},
-                               cpr::Header{{"Authorization", ctx->token}}, cpr::Header{{"User-Agent", USER_AGENT_VAL}},
+                               cpr::Header{{"Authorization", ctx->token}},
+                               cpr::Header{{"User-Agent", USER_AGENT_VAL}},
                                cpr::Timeout{10000});
 
     rapidjson::Document doc;
@@ -96,8 +102,10 @@ bool get_channels_for_server(DiscordContext* ctx, Server* server)
     {
         const rapidjson::Value& item = doc[i];
 
-        server->channels[i] = new Channel(static_cast<ChannelType>(item["type"].GetUint()), item["name"].GetString(),
-                                          item["id"].GetString());
+        auto channel_type = (ChannelType)item["type"].GetUint();
+        auto name = item["name"].GetString();
+        auto id = item["id"].GetString();
+        server->channels[i] = new Channel(channel_type, name, id);
         server->channel_count++;
     }
 
@@ -115,7 +123,8 @@ bool get_friends(DiscordContext* ctx)
     }
 
     cpr::Response r = cpr::Get(cpr::Url{"https://discord.com/api/v9/users/@me/relationships"},
-                               cpr::Header{{"Authorization", ctx->token}}, cpr::Header{{"User-Agent", USER_AGENT_VAL}},
+                               cpr::Header{{"Authorization", ctx->token}},
+                               cpr::Header{{"User-Agent", USER_AGENT_VAL}},
                                cpr::Timeout{10000});
 
     if (r.status_code != 200)
@@ -146,7 +155,8 @@ std::string get_chat_id_from_user(DiscordContext* ctx, std::string user_id)
     std::string body("{\"recipient_id\": " + user_id + "}");
     cpr::Response r = cpr::Post(cpr::Url{"https://discord.com/api/v9/users/@me/channels"},
                                 cpr::Header{{"content-type", "application/json"}},
-                                cpr::Header{{"Authorization", ctx->token}}, cpr::Timeout{10000}, cpr::Body{body});
+                                cpr::Header{{"Authorization", ctx->token}},
+                                cpr::Timeout{10000}, cpr::Body{body});
 
     if (r.status_code != 200)
         return "";
@@ -162,9 +172,10 @@ bool get_focused_channel_content(DiscordContext* ctx)
     ctx->focused_channel->messages.fill(nullptr);
     ctx->focused_channel->message_count = 0;
 
-    cpr::Response r = cpr::Get(
-        cpr::Url{"https://discord.com/api/v9/channels/" + ctx->focused_channel->id + "/messages?limit=10"},
-        cpr::Header{{"Authorization", ctx->token}}, cpr::Header{{"User-Agent", USER_AGENT_VAL}}, cpr::Timeout{10000});
+    cpr::Response r = cpr::Get(cpr::Url{"https://discord.com/api/v9/channels/" + ctx->focused_channel->id + "/messages?limit=10"},
+                               cpr::Header{{"Authorization", ctx->token}},
+                               cpr::Header{{"User-Agent", USER_AGENT_VAL}},
+                               cpr::Timeout{10000});
 
     if (r.status_code != 200)
         return false;
@@ -195,7 +206,9 @@ bool post_message(DiscordContext* ctx, std::string message, std::string channelI
     std::string body("{\"content\": \"" + message + "\"}");
     cpr::Response r = cpr::Post(cpr::Url{"https://discord.com/api/v9/channels/" + channelId + "/messages"},
                                 cpr::Header{{"content-type", "application/json"}},
-                                cpr::Header{{"Authorization", ctx->token}}, cpr::Timeout{10000}, cpr::Body{body});
+                                cpr::Header{{"Authorization", ctx->token}},
+                                cpr::Timeout{10000},
+                                cpr::Body{body});
 
     return true;
 }
