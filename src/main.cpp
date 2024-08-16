@@ -142,7 +142,6 @@ std::string read_token_bin()
 int main(int, char**)
 {
   g_ctx = discord::get_context(read_token_bin());
-  /*post_message(g_ctx, "Dongs", "1273467180326977663");*/
 
   take_input();
 
