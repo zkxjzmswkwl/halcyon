@@ -18,8 +18,10 @@ Would-be-nice
 Unsure/want to benchmark
 - How much slower is std::string over char*?
 - - Is it really worth the convenience?
+- - std::string is much faster than char*/char[].
 - Smart pointers
 - - I'm already fairly certain use of any of these in a simple program isn't worth it.
+- - It isn't.
 
 Things to never do in own code:
 - Polymorphism
