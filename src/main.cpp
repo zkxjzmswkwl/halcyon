@@ -1,4 +1,5 @@
 #include "discord.h"
+#include "stream.h"
 #include "terminal.h"
 #include <assert.h>
 #include <fstream>
@@ -26,11 +27,10 @@ void render()
     term::print_label(" Channel: ");
     term::print_label(f_channel->name);
     // -
-    printf("\n\n\n");
+    printf("\n\n");
 
-    for (int i = g_ctx->focused_channel->message_count; i-- > 0;)
+    for (auto&& message : g_ctx->focused_channel->messages)
     {
-        auto message = g_ctx->focused_channel->messages.at(i);
         term::print_green(message->author);
         printf("\n  %s\n", message->body.c_str());
     }
@@ -139,6 +139,8 @@ std::string read_token_bin()
 int main(int, char**)
 {
     g_ctx = discord::get_context(read_token_bin());
+    // it works so it must be fine >.<
+    std::thread _t_websocket(discord::stream::open, (__int64*)g_ctx);
 
     take_input();
 

@@ -44,7 +44,7 @@ struct Server
     }
     std::string name;
     std::string id;
-    std::array<Channel*, 300> channels{};
+    std::array<Channel*, 1500> channels{};
     unsigned int channel_count = 0;
 };
 
@@ -55,8 +55,7 @@ struct Channel
     }
     ChannelType channel_type;
     // 100 temp
-    std::array<Message*, 100> messages{};
-    unsigned int message_count = 0;
+    std::vector<Message*> messages{};
     std::string name;
     std::string id;
 };

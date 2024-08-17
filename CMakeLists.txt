@@ -10,8 +10,10 @@ include(C:/Users/owcar/vcpkg/scripts/buildsystems/vcpkg.cmake)
 
 find_package(cpr CONFIG REQUIRED)
 find_package(RapidJSON CONFIG REQUIRED)
+find_package(ixwebsocket CONFIG REQUIRED)
 
 add_executable(halcyon ${SOURCES} ${HEADERS})
 
 target_link_libraries(halcyon PRIVATE cpr::cpr)
 target_link_libraries(halcyon PRIVATE rapidjson)
+target_link_libraries(halcyon PRIVATE ixwebsocket::ixwebsocket)
