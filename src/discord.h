@@ -24,8 +24,9 @@ struct Friend;
 
 struct DiscordContext
 {
-    DiscordContext(std::string token) : token(token)
+    DiscordContext(std::string token)
     {
+        this->token = token;
     }
     std::array<Server*, 200> servers{};
     std::vector<Friend*> friends{};
@@ -82,23 +83,23 @@ struct Friend
 
 std::string post_login(std::string email, std::string password);
 
-DiscordContext* get_context(std::string token);
+bool fetch_data();
 
-bool get_servers(DiscordContext*);
+bool get_servers();
 
-bool get_channels_for_server(DiscordContext*, Server*);
+bool get_channels_for_server(Server*);
 
-bool get_focused_channel_content(DiscordContext*);
+bool get_focused_channel_content();
 
-bool get_friends(DiscordContext*);
+bool get_friends();
 
-std::string get_chat_id_from_user(DiscordContext*, std::string);
+std::string get_chat_id_from_user(std::string);
 
-bool post_message(DiscordContext*, std::string message, std::string channelId);
+bool post_message(std::string message, std::string channelId);
 
-void display_servers(DiscordContext*);
+void display_servers();
 
 void display_channels_for_server(Server* server, ChannelType channel_type);
 
-void display_friends(DiscordContext*);
+void display_friends();
 } // namespace discord

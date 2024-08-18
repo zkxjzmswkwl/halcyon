@@ -1,5 +1,4 @@
 build/*
 .cache/*
 compile_commands.json
-account.bin
-token.bin
+*.bin

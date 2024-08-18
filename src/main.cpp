@@ -1,3 +1,4 @@
+#include "globals.h"
 #include "discord.h"
 #include "stream.h"
 #include "terminal.h"
@@ -8,7 +9,7 @@
 #include <string>
 #include <thread>
 
-discord::DiscordContext* g_ctx;
+discord::DiscordContext* g_ctx = nullptr;
 
 void render()
 {
@@ -17,7 +18,6 @@ void render()
 
     term::clear();
     // Inefficient/bad
-
     // focused_server won't be populated if messaging a user directly.
     if (f_server)
     {
@@ -39,7 +39,8 @@ void render()
 void switch_channel_focus(discord::Channel* channel)
 {
     g_ctx->focused_channel = channel;
-    discord::get_focused_channel_content(g_ctx);
+    discord::get_focused_channel_content();
+    render();
 }
 
 /// TODO: Move to input handler of some sort.
@@ -51,19 +52,19 @@ void take_input()
 
     if (input == "/list")
     {
-        display_servers(g_ctx);
+        discord::display_servers();
     }
     else if (input.starts_with("/say"))
     {
         auto delim_index = input.find(' ');
         auto msg_body = input.substr(delim_index + 1, input.length());
-        post_message(g_ctx, msg_body, g_ctx->focused_channel->id);
-        get_focused_channel_content(g_ctx);
+        discord::post_message(msg_body, g_ctx->focused_channel->id);
+        discord::get_focused_channel_content();
         render();
     }
     else if (input == "/fr")
     {
-        discord::display_friends(g_ctx);
+        discord::display_friends();
     }
     else if (input.starts_with("/fr"))
     {
@@ -71,7 +72,7 @@ void take_input()
         auto chosen_index = input.substr(delim_index + 1, input.length());
         auto _friend = g_ctx->friends.at(atoi(chosen_index.c_str()));
 
-        auto private_chat_id = discord::get_chat_id_from_user(g_ctx, _friend->id);
+        auto private_chat_id = discord::get_chat_id_from_user(_friend->id);
         // This is a memory leak.
         // Too bad!
         // TODO: fix.
@@ -138,9 +139,27 @@ std::string read_token_bin()
 
 int main(int, char**)
 {
-    g_ctx = discord::get_context(read_token_bin());
-    // it works so it must be fine >.<
-    std::thread _t_websocket(discord::stream::open, (__int64*)g_ctx);
+    auto token = read_token_bin();
+    if (token.empty())
+    {
+        printf("ERR: Token empty\n");
+        return 1;
+    }
+
+    g_ctx = new discord::DiscordContext(token);
+
+    if (!g_ctx)
+    {
+        printf("ERR: g_ctx nullptr\n");
+        return 1;
+    }
+
+    if (!discord::fetch_data())
+    {
+        printf("ERR: Could not fetch data\n");
+        return 1;
+    }
+    std::thread _t_websocket(discord::stream::open);
 
     take_input();
 

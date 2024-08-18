@@ -1,5 +1,6 @@
 #include "stream.h"
 #include "discord.h"
+#include "globals.h"
 #include <chrono>
 #include <ixwebsocket/IXNetSystem.h>
 #include <ixwebsocket/IXUserAgent.h>
@@ -11,25 +12,24 @@
 #include <thread>
 
 typedef ix::WebSocketMessageType MsgType;
-std::string build_auth_object(std::string& token);
-std::string build_identify_object(std::string& token);
+std::string build_auth_object();
+std::string build_identify_object();
+void message_intake(const ix::WebSocketMessagePtr& msg);
 
 ix::WebSocket* g_web_socket;
+discord::stream::WebSocketContext* g_ws_ctx;
 
 namespace discord
 {
 namespace stream
 {
-// This entire function is out of hand.
-// Want to figure shit out before I fix it.
-void open(__int64* disc_ctx_ptr)
+void open()
 {
-    // it works so it must be fine >.<
-    // TODO: Fix this entire god damn thing.
-    DiscordContext* disc_ctx = (DiscordContext*)disc_ctx_ptr;
+    g_ws_ctx = new WebSocketContext();
+
     ix::initNetSystem();
     ix::WebSocket web_socket;
-    auto auth_blob = build_auth_object(disc_ctx->token);
+    auto auth_blob = build_auth_object();
     unsigned int heartbeat_interval = 41250;
     bool received_interval = false;
 
@@ -38,81 +38,26 @@ void open(__int64* disc_ctx_ptr)
     web_socket.setUrl(DISCORD_WS_URL);
     web_socket.setExtraHeaders(ix::WebSocketHttpHeaders{{"User-Agent", UA}, {"Origin", "https://discord.com"}});
     web_socket.disableAutomaticReconnection();
-
-    web_socket.setOnMessageCallback(
-        [&disc_ctx, &received_interval, &heartbeat_interval](const ix::WebSocketMessagePtr& msg) {
-            if (msg->type == MsgType::Message)
-            {
-                rapidjson::Document doc;
-                doc.Parse(msg->str.c_str());
-
-                auto op = doc["op"].GetInt();
-
-                // General event recv
-                if (op == 0)
-                {
-                    std::string t = doc["t"].GetString();
-                    std::string wtf = "MESSAGE_CREATE";
-                    if (t == wtf)
-                    {
-                        auto d = doc["d"].GetObj();
-                        if (d.HasMember("channel_id"))
-                        {
-                            auto channel_id = d["channel_id"].GetString();
-                            if (disc_ctx->focused_channel->id == channel_id)
-                            {
-                                auto timestamp = d["timestamp"].GetString();
-                                auto author = d["author"].GetObj()["global_name"].GetString();
-                                auto body = d["content"].GetString();
-
-                                // pretty dumb.
-                                disc_ctx->focused_channel->messages.push_back(new Message(timestamp, author, body));
-                                printf("added message with content %s.\n", body);
-                            }
-                        }
-                    }
-                }
-                // Packet informing of us of the heartbeat interval.
-                else if (op == 10)
-                {
-                    auto d = doc["d"].GetObj();
-                    heartbeat_interval = d["heartbeat_interval"].GetInt();
-                    received_interval = true;
-                }
-                // Packet acking our heartbeat.
-                else if (op == 11)
-                {
-                    printf("Discord ack heartbeat\n");
-                }
-            }
-            else if (msg->type == MsgType::Open)
-            {
-                printf("Connected to Discord ws.\n");
-            }
-            else if (msg->type == MsgType::Error)
-            {
-                printf("Websocket connection issue -> %s\n", msg->errorInfo.reason.c_str());
-            }
-        });
+    web_socket.setOnMessageCallback(message_intake);
 
     web_socket.start();
     web_socket.send(auth_blob);
 
     bool initial_heartbeat = false;
+
+    // Wait until we've received a packet containing the heartbeat interval before we send initial heartbeat.
+    while (!g_ws_ctx->has_received_interval)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    // Directly after the gateway expects a packet from the client identifying itself.
+    web_socket.send(R"({"op": 1, "d": null})");
+    web_socket.send(build_identify_object());
+
+    // This keeps stops `web_socket` from being destroyed and also adheres to the gateway's heartbeat specification.
     while (true)
     {
-        if (received_interval)
-        {
-            // This shit's braindead. Fix it.
-            if (!initial_heartbeat)
-            {
-                web_socket.send(R"({"op": 1, "d": null})");
-                web_socket.send(build_identify_object(disc_ctx->token).c_str());
-                initial_heartbeat = true;
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(heartbeat_interval));
-            web_socket.send(R"({"op": 1, "d": null})");
-        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(heartbeat_interval));
+        web_socket.send(R"({"op": 1, "d": null})");
     }
 }
 
@@ -151,7 +96,7 @@ std::string build_request_messages_object(std::string guild_id, std::string chan
 } // namespace stream
 } // namespace discord
 
-std::string build_auth_object(std::string& token)
+std::string build_auth_object()
 {
     using namespace rapidjson;
 
@@ -163,7 +108,7 @@ std::string build_auth_object(std::string& token)
     doc.AddMember("op", 2, allocator);
 
     Value d(kObjectType);
-    d.AddMember("token", Value().SetString(token.c_str(), allocator), allocator);
+    d.AddMember("token", Value().SetString(g_ctx->token.c_str(), allocator), allocator);
     d.AddMember("compress", Value().SetBool(false), allocator);
     d.AddMember("properties", Value(kObjectType), allocator);
 
@@ -182,7 +127,7 @@ std::string build_auth_object(std::string& token)
     return buffer.GetString();
 }
 
-std::string build_identify_object(std::string& token)
+std::string build_identify_object()
 {
     using namespace rapidjson;
 
@@ -195,7 +140,7 @@ std::string build_identify_object(std::string& token)
 
     Value d(kObjectType);
 
-    d.AddMember("token", Value().SetString(token.c_str(), allocator), allocator);
+    d.AddMember("token", Value().SetString(g_ctx->token.c_str(), allocator), allocator);
 
     Value properties(kObjectType);
     properties.AddMember("os", Value().SetString("linux", allocator), allocator);
@@ -229,4 +174,67 @@ std::string build_identify_object(std::string& token)
     document.Accept(writer);
 
     return buffer.GetString();
+}
+
+void gateway_event_handler(const ix::WebSocketMessagePtr& msg)
+{
+    rapidjson::Document doc;
+    doc.Parse(msg->str.c_str());
+
+    if (!doc.HasMember("op") || !doc.HasMember("d"))
+        return;
+
+    auto op = doc["op"].GetInt();
+
+    switch (op)
+    {
+    // General event transmission. For now we only care about `MESSAGE_CREATE`
+    case 0: {
+        if (!doc.HasMember("t"))
+            return;
+        if (strcmp(doc["t"].GetString(), "MESSAGE_CREATE") != 0)
+            return;
+
+        auto d = doc["d"].GetObj();
+
+        auto channel_id = d["channel_id"].GetString();
+        if (g_ctx->focused_channel->id == channel_id)
+        {
+            auto timestamp = d["timestamp"].GetString();
+            auto author = d["author"].GetObj()["global_name"].GetString();
+            auto body = d["content"].GetString();
+
+            g_ctx->focused_channel->messages.push_back(new discord::Message(timestamp, author, body));
+        }
+        break;
+    }
+    // Packet informing of us of the heartbeat interval.
+    case 10: {
+        // Don't need to check for key presence here.
+        // Reason being: if they aren't there, we should crash.
+        auto d = doc["d"].GetObj();
+        g_ws_ctx->has_received_interval = true;
+        g_ws_ctx->heartbeat_interval = d["heartbeat_interval"].GetInt();
+        break;
+    }
+    } // ends switch
+}
+
+void message_intake(const ix::WebSocketMessagePtr& msg)
+{
+    switch (msg->type)
+    {
+    case MsgType::Message:
+        gateway_event_handler(msg);
+        break;
+    case MsgType::Open:
+        printf("Discord ws connection opened\n");
+        break;
+    case MsgType::Close:
+        printf("Discord ws connection closed\n");
+        break;
+    case MsgType::Error:
+        printf("Discord ws error: %s\n", msg->errorInfo.reason.c_str());
+        break;
+    }
 }

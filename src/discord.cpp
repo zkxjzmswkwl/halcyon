@@ -1,4 +1,5 @@
 #include "discord.h"
+#include "globals.h"
 #include <cpr/cpr.h>
 #include <rapidjson/document.h>
 
@@ -32,33 +33,24 @@ std::string post_login(std::string username, std::string password)
 
     return "";
 }
-/*---------------------------------------------------------------------------
-* Allocates `DiscordContext* ctx`
-* Passes it to `get_servers(ctx)`
-* `get_servers(ctx)` allocates one `Server*` for each server user is in,
-* which are added to `ctx->servers`.
-*
-* For each server user is in, calls `get_channels_for_server(ctx, Server*)`,
-* which allocates one `Channel*` for each channel in the given server.
-* Which are then pushed to `server->channels`.
----------------------------------------------------------------------------*/
-DiscordContext* get_context(std::string token)
+//---------------------------------------------------------------------------
+bool fetch_data()
 {
-    DiscordContext* ctx = new DiscordContext(token);
+    printf(g_ctx->token.c_str());
+    printf("\n");
 
-    if (!get_servers(ctx))
-        printf("ERR: Could not get servers.\n");
-
-    if (!get_friends(ctx))
-        printf("ERR: Could not get friends.\n");
-
-    return ctx;
+    if (!get_servers() || !get_friends())
+    {
+        printf("ERR: Could not get servers or friends.\n");
+        return false;
+    }
+    return true;
 }
 //---------------------------------------------------------------------------
-bool get_servers(DiscordContext* ctx)
+bool get_servers()
 {
     cpr::Response r =
-        cpr::Get(cpr::Url{"https://discord.com/api/v9/users/@me/guilds"}, cpr::Header{{"Authorization", ctx->token}},
+        cpr::Get(cpr::Url{"https://discord.com/api/v9/users/@me/guilds"}, cpr::Header{{"Authorization", g_ctx->token}},
                  cpr::Header{{"User-Agent", USER_AGENT_VAL}}, cpr::Timeout{10000});
 
     rapidjson::Document doc;
@@ -71,19 +63,19 @@ bool get_servers(DiscordContext* ctx)
     {
         const rapidjson::Value& item = doc[i];
         Server* newServer = new Server(item["name"].GetString(), item["id"].GetString());
-        ctx->servers[i] = newServer;
-        ctx->server_count++;
-        if (!get_channels_for_server(ctx, newServer))
+        g_ctx->servers[i] = newServer;
+        g_ctx->server_count++;
+        if (!get_channels_for_server(newServer))
             printf("ERR: Could not retrieve channel listing for server %s\n", newServer->name.c_str());
     }
 
     return true;
 }
 //---------------------------------------------------------------------------
-bool get_channels_for_server(DiscordContext* ctx, Server* server)
+bool get_channels_for_server(Server* server)
 {
     cpr::Response r = cpr::Get(cpr::Url{"https://discord.com/api/v9/guilds/" + server->id + "/channels"},
-                               cpr::Header{{"Authorization", ctx->token}}, cpr::Header{{"User-Agent", USER_AGENT_VAL}},
+                               cpr::Header{{"Authorization", g_ctx->token}}, cpr::Header{{"User-Agent", USER_AGENT_VAL}},
                                cpr::Timeout{10000});
 
     rapidjson::Document doc;
@@ -106,18 +98,18 @@ bool get_channels_for_server(DiscordContext* ctx, Server* server)
     return true;
 }
 //---------------------------------------------------------------------------
-bool get_friends(DiscordContext* ctx)
+bool get_friends()
 {
-    if (!ctx->friends.empty())
+    if (!g_ctx->friends.empty())
     {
-        for (Friend* friendPtr : ctx->friends)
+        for (Friend* friendPtr : g_ctx->friends)
             delete friendPtr;
 
-        ctx->friends.clear();
+        g_ctx->friends.clear();
     }
 
     cpr::Response r = cpr::Get(cpr::Url{"https://discord.com/api/v9/users/@me/relationships"},
-                               cpr::Header{{"Authorization", ctx->token}}, cpr::Header{{"User-Agent", USER_AGENT_VAL}},
+                               cpr::Header{{"Authorization", g_ctx->token}}, cpr::Header{{"User-Agent", USER_AGENT_VAL}},
                                cpr::Timeout{10000});
 
     if (r.status_code != 200)
@@ -137,18 +129,18 @@ bool get_friends(DiscordContext* ctx)
         auto name = user_obj["username"].GetString();
         auto id = item["id"].GetString();
 
-        ctx->friends.push_back(new Friend(id, name));
+        g_ctx->friends.push_back(new Friend(id, name));
     }
 
     return true;
 }
 //---------------------------------------------------------------------------
-std::string get_chat_id_from_user(DiscordContext* ctx, std::string user_id)
+std::string get_chat_id_from_user(std::string user_id)
 {
     std::string body("{\"recipient_id\": " + user_id + "}");
     cpr::Response r = cpr::Post(cpr::Url{"https://discord.com/api/v9/users/@me/channels"},
                                 cpr::Header{{"content-type", "application/json"}},
-                                cpr::Header{{"Authorization", ctx->token}}, cpr::Timeout{10000}, cpr::Body{body});
+                                cpr::Header{{"Authorization", g_ctx->token}}, cpr::Timeout{10000}, cpr::Body{body});
 
     if (r.status_code != 200)
         return "";
@@ -159,13 +151,13 @@ std::string get_chat_id_from_user(DiscordContext* ctx, std::string user_id)
     return doc["id"].GetString();
 }
 //---------------------------------------------------------------------------
-bool get_focused_channel_content(DiscordContext* ctx)
+bool get_focused_channel_content()
 {
-    ctx->focused_channel->messages.clear();
+    g_ctx->focused_channel->messages.clear();
 
     cpr::Response r = cpr::Get(
-        cpr::Url{"https://discord.com/api/v9/channels/" + ctx->focused_channel->id + "/messages?limit=10"},
-        cpr::Header{{"Authorization", ctx->token}}, cpr::Header{{"User-Agent", USER_AGENT_VAL}}, cpr::Timeout{10000});
+        cpr::Url{"https://discord.com/api/v9/channels/" + g_ctx->focused_channel->id + "/messages?limit=10"},
+        cpr::Header{{"Authorization", g_ctx->token}}, cpr::Header{{"User-Agent", USER_AGENT_VAL}}, cpr::Timeout{10000});
 
     if (r.status_code != 200)
         return false;
@@ -176,7 +168,6 @@ bool get_focused_channel_content(DiscordContext* ctx)
     if (!doc.IsArray())
         return false;
 
-    /*for (unsigned int i = 0; i < doc.Size(); ++i)*/
     for (unsigned int i = doc.Size(); i-- > 0;)
     {
         const rapidjson::Value& item = doc[i];
@@ -185,30 +176,30 @@ bool get_focused_channel_content(DiscordContext* ctx)
         auto author = item["author"].GetObj()["global_name"].GetString();
         auto body = item["content"].GetString();
 
-        ctx->focused_channel->messages.push_back(new Message(timestamp, author, body));
+        g_ctx->focused_channel->messages.push_back(new Message(timestamp, author, body));
     }
 
     return true;
 }
 //---------------------------------------------------------------------------
-bool post_message(DiscordContext* ctx, std::string message, std::string channelId)
+bool post_message(std::string message, std::string channelId)
 {
     std::string body("{\"content\": \"" + message + "\"}");
     cpr::Response r = cpr::Post(cpr::Url{"https://discord.com/api/v9/channels/" + channelId + "/messages"},
                                 cpr::Header{{"content-type", "application/json"}},
-                                cpr::Header{{"Authorization", ctx->token}}, cpr::Timeout{10000}, cpr::Body{body});
+                                cpr::Header{{"Authorization", g_ctx->token}}, cpr::Timeout{10000}, cpr::Body{body});
 
     return true;
 }
 //---------------------------------------------------------------------------
-void display_servers(DiscordContext* ctx)
+void display_servers()
 {
-    for (unsigned int i = 0; i < ctx->server_count; i++)
+    for (unsigned int i = 0; i < g_ctx->server_count; i++)
     {
         if (i == 3 || i == 5)
             continue;
 
-        auto server = ctx->servers.at(i);
+        auto server = g_ctx->servers.at(i);
         if (server == nullptr)
             break;
 
@@ -231,11 +222,11 @@ void display_channels_for_server(Server* server, ChannelType channel_type)
     }
 }
 //---------------------------------------------------------------------------
-void display_friends(DiscordContext* ctx)
+void display_friends()
 {
-    for (unsigned int i = 0; i < ctx->friends.size(); i++)
+    for (unsigned int i = 0; i < g_ctx->friends.size(); i++)
     {
-        auto f = ctx->friends.at(i);
+        auto f = g_ctx->friends.at(i);
         printf("[%d]\t%s\n", i, f->username.c_str());
     }
 }

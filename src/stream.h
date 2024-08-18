@@ -10,7 +10,15 @@ namespace discord
 {
 namespace stream
 {
-void open(__int64*);
+
+struct WebSocketContext
+{
+    WebSocketContext() {}
+    bool has_received_interval = false;
+    unsigned int heartbeat_interval;
+};
+
+void open();
 
 void send(std::string packet);
 } // namespace stream
